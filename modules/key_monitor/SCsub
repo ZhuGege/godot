@@ -1,0 +1,22 @@
+#!/usr/bin/env python
+# SCsub — key_monitor module build script
+from misc.utility.scons_hints import *
+
+Import("env")
+Import("env_modules")
+
+env_key_monitor = env_modules.Clone()
+
+# 公共源文件（所有平台）
+env_key_monitor.add_source_files(env.modules_sources, "global_input_monitor.cpp")
+env_key_monitor.add_source_files(env.modules_sources, "register_types.cpp")
+
+# Windows
+if env["platform"] == "windows":
+    env_key_monitor.add_source_files(env.modules_sources, "global_input_monitor_windows.cpp")
+
+# macOS
+elif env["platform"] == "macos":
+    env_key_monitor.add_source_files(env.modules_sources, "global_input_monitor_macos.mm")
+    # 链接 ApplicationServices 框架（CGEventTap 所在）
+    env_key_monitor.Append(LINKFLAGS=["-framework", "ApplicationServices"])
