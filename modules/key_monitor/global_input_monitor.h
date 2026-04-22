@@ -10,6 +10,7 @@
 /*    mouse_button_pressed(btn: int)  —— 鼠标键按下 (1=左 2=右 3=中)        */
 /*    mouse_button_released(btn: int) —— 鼠标键释放                         */
 /*    mouse_moved(x: int, y: int)   —— 鼠标移动（全局屏幕坐标）              */
+/*    mouse_wheel_rolled(delta: int) —— 鼠标滚轮滚动（正=上 负=下）            */
 /*                                                                        */
 /*  属性：                                                                  */
 /*    enabled : bool  —— 运行时开关，可随时打开 / 关闭监听                    */
@@ -44,6 +45,7 @@ public:
     void _emit_mouse_button_pressed(int p_button);
     void _emit_mouse_button_released(int p_button);
     void _emit_mouse_moved(int p_x, int p_y);
+    void _emit_mouse_wheel_rolled(int p_delta);
 
     /* ---- 生命周期（由 register_types 调用） ---- */
     virtual void start() {}

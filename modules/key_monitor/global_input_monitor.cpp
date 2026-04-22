@@ -27,6 +27,7 @@ void GlobalInputMonitor::_bind_methods() {
     ClassDB::bind_method(D_METHOD("_emit_mouse_button_pressed",  "button"),  &GlobalInputMonitor::_emit_mouse_button_pressed);
     ClassDB::bind_method(D_METHOD("_emit_mouse_button_released", "button"),  &GlobalInputMonitor::_emit_mouse_button_released);
     ClassDB::bind_method(D_METHOD("_emit_mouse_moved",           "x", "y"), &GlobalInputMonitor::_emit_mouse_moved);
+    ClassDB::bind_method(D_METHOD("_emit_mouse_wheel_rolled",     "delta"), &GlobalInputMonitor::_emit_mouse_wheel_rolled);
 
     /* 信号 */
     ADD_SIGNAL(MethodInfo("key_pressed",
@@ -40,6 +41,8 @@ void GlobalInputMonitor::_bind_methods() {
     ADD_SIGNAL(MethodInfo("mouse_moved",
             PropertyInfo(Variant::INT, "x"),
             PropertyInfo(Variant::INT, "y")));
+    ADD_SIGNAL(MethodInfo("mouse_wheel_rolled",
+            PropertyInfo(Variant::INT, "delta")));
 }
 
 void GlobalInputMonitor::set_enabled(bool p_enabled) {
@@ -73,6 +76,10 @@ void GlobalInputMonitor::_emit_mouse_button_released(int p_button) {
 
 void GlobalInputMonitor::_emit_mouse_moved(int p_x, int p_y) {
     emit_signal("mouse_moved", p_x, p_y);
+}
+
+void GlobalInputMonitor::_emit_mouse_wheel_rolled(int p_delta) {
+    emit_signal("mouse_wheel_rolled", p_delta);
 }
 
 GlobalInputMonitor::GlobalInputMonitor() {
