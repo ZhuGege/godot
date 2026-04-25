@@ -1438,6 +1438,12 @@ void DisplayServer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("window_get_title_size", "title", "window_id"), &DisplayServer::window_get_title_size, DEFVAL(MAIN_WINDOW_ID));
 	ClassDB::bind_method(D_METHOD("window_set_mouse_passthrough", "region", "window_id"), &DisplayServer::window_set_mouse_passthrough, DEFVAL(MAIN_WINDOW_ID));
 
+	ClassDB::bind_method(D_METHOD("window_set_alpha_passthrough_enabled", "enabled", "window_id"), &DisplayServer::window_set_alpha_passthrough_enabled, DEFVAL(MAIN_WINDOW_ID));
+	ClassDB::bind_method(D_METHOD("window_get_alpha_passthrough_enabled", "window_id"), &DisplayServer::window_get_alpha_passthrough_enabled, DEFVAL(MAIN_WINDOW_ID));
+	ClassDB::bind_method(D_METHOD("window_set_alpha_passthrough_threshold", "threshold", "window_id"), &DisplayServer::window_set_alpha_passthrough_threshold, DEFVAL(MAIN_WINDOW_ID));
+	ClassDB::bind_method(D_METHOD("window_update_alpha_buffer", "alpha_bytes", "width", "height", "window_id"), &DisplayServer::window_update_alpha_buffer, DEFVAL(MAIN_WINDOW_ID));
+	ClassDB::bind_method(D_METHOD("window_update_alpha_from_image", "image", "window_id"), &DisplayServer::window_update_alpha_from_image, DEFVAL(MAIN_WINDOW_ID));
+
 	ClassDB::bind_method(D_METHOD("window_get_current_screen", "window_id"), &DisplayServer::window_get_current_screen, DEFVAL(MAIN_WINDOW_ID));
 	ClassDB::bind_method(D_METHOD("window_set_current_screen", "screen", "window_id"), &DisplayServer::window_set_current_screen, DEFVAL(MAIN_WINDOW_ID));
 

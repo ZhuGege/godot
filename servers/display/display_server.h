@@ -414,6 +414,7 @@ public:
 		WINDOW_FLAG_POPUP_WM_HINT,
 		WINDOW_FLAG_MINIMIZE_DISABLED,
 		WINDOW_FLAG_MAXIMIZE_DISABLED,
+		WINDOW_FLAG_ALPHA_PASSTHROUGH,
 		WINDOW_FLAG_MAX,
 	};
 
@@ -432,6 +433,7 @@ public:
 		WINDOW_FLAG_POPUP_WM_HINT_BIT = (1 << WINDOW_FLAG_POPUP_WM_HINT),
 		WINDOW_FLAG_MINIMIZE_DISABLED_BIT = (1 << WINDOW_FLAG_MINIMIZE_DISABLED),
 		WINDOW_FLAG_MAXIMIZE_DISABLED_BIT = (1 << WINDOW_FLAG_MAXIMIZE_DISABLED),
+		WINDOW_FLAG_ALPHA_PASSTHROUGH_BIT = (1 << WINDOW_FLAG_ALPHA_PASSTHROUGH),
 	};
 
 	virtual WindowID create_sub_window(WindowMode p_mode, VSyncMode p_vsync_mode, uint32_t p_flags, const Rect2i &p_rect = Rect2i(), bool p_exclusive = false, WindowID p_transient_parent = INVALID_WINDOW_ID);
@@ -472,6 +474,17 @@ public:
 	virtual Size2i window_get_title_size(const String &p_title, WindowID p_window = MAIN_WINDOW_ID) const { return Size2i(); }
 
 	virtual void window_set_mouse_passthrough(const Vector<Vector2> &p_region, WindowID p_window = MAIN_WINDOW_ID);
+
+	// Alpha-based per-pixel mouse passthrough. GDScript uploads a single-channel
+	// alpha image each frame; WM_NCHITTEST on Windows uses it to decide whether
+	// a click goes to the game or passes through to the window below.
+	virtual void window_set_alpha_passthrough_enabled(bool p_enabled, WindowID p_window = MAIN_WINDOW_ID) {}
+	virtual bool window_get_alpha_passthrough_enabled(WindowID p_window = MAIN_WINDOW_ID) const { return false; }
+	virtual void window_set_alpha_passthrough_threshold(int p_threshold, WindowID p_window = MAIN_WINDOW_ID) {}
+	virtual void window_update_alpha_buffer(const PackedByteArray &p_alpha, int p_width, int p_height, WindowID p_window = MAIN_WINDOW_ID) {}
+	// Convenience: upload alpha directly from a Viewport texture image (RGBA8).
+	// The engine extracts the alpha channel in C++, avoiding a GDScript loop.
+	virtual void window_update_alpha_from_image(const Ref<Image> &p_image, WindowID p_window = MAIN_WINDOW_ID) {}
 
 	virtual int window_get_current_screen(WindowID p_window = MAIN_WINDOW_ID) const = 0;
 	virtual void window_set_current_screen(int p_screen, WindowID p_window = MAIN_WINDOW_ID) = 0;
