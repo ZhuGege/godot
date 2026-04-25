@@ -2005,14 +2005,82 @@ void DisplayServerWindows::window_set_mouse_passthrough(const Vector<Vector2> &p
 	_update_window_mouse_passthrough(p_window);
 }
 
+void DisplayServerWindows::window_set_alpha_passthrough_enabled(bool p_enabled, WindowID p_window) {
+	_THREAD_SAFE_METHOD_
+
+	ERR_FAIL_COND(!windows.has(p_window));
+	WindowData &wd = windows[p_window];
+	if (p_enabled && !wd.mpass) {
+		wd.mpass = true;
+		// Alpha passthrough uses SetWindowRgn to define the clickable region.
+		// Transparent pixels are excluded from the window region, so clicks
+		// pass through to windows below. No WS_EX_TRANSPARENT needed.
+	} else if (!p_enabled && wd.mpass) {
+		wd.mpass = false;
+		wd.alpha_data.clear();
+		wd.alpha_width = 0;
+		wd.alpha_height = 0;
+		// Remove the window region to restore full clickability.
+		SetWindowRgn(wd.hWnd, nullptr, TRUE);
+	}
+}
+
+bool DisplayServerWindows::window_get_alpha_passthrough_enabled(WindowID p_window) const {
+	_THREAD_SAFE_METHOD_
+
+	ERR_FAIL_COND_V(!windows.has(p_window), false);
+	return windows[p_window].mpass;
+}
+
+void DisplayServerWindows::window_set_alpha_passthrough_threshold(int p_threshold, WindowID p_window) {
+	_THREAD_SAFE_METHOD_
+
+	ERR_FAIL_COND(!windows.has(p_window));
+	windows[p_window].alpha_threshold = CLAMP(p_threshold, 0, 255);
+}
+
+void DisplayServerWindows::window_update_alpha_buffer(const PackedByteArray &p_alpha, int p_width, int p_height, WindowID p_window) {
+	_THREAD_SAFE_METHOD_
+
+	ERR_FAIL_COND(!windows.has(p_window));
+	ERR_FAIL_COND(p_width <= 0 || p_height <= 0);
+	ERR_FAIL_COND(p_alpha.size() < p_width * p_height);
+
+	WindowData &wd = windows[p_window];
+	wd.alpha_width = p_width;
+	wd.alpha_height = p_height;
+	wd.alpha_data.resize(p_width * p_height);
+	memcpy(wd.alpha_data.ptrw(), p_alpha.ptr(), p_width * p_height);
+
+	// Update the window region based on the new alpha data.
+	if (wd.mpass) {
+		_update_window_rgn_from_alpha(p_window);
+	}
+}
+
+void DisplayServerWindows::window_update_alpha_from_image(const Ref<Image> &p_image, WindowID p_window) {
+	_THREAD_SAFE_METHOD_
+
+	ERR_FAIL_COND(!windows.has(p_window));
+	ERR_FAIL_COND(p_image.is_null());
+
+	_update_window_alpha_from_image(p_window, p_image);
+}
+
 void DisplayServerWindows::_update_window_mouse_passthrough(WindowID p_window) {
 	ERR_FAIL_COND(!windows.has(p_window));
 
 	const WindowData &wd = windows[p_window];
 	bool clip_pixel = (wd.multiwindow_fs || (wd.borderless && wd.maximized));
 	bool pass_set = (wd.mpath.size() > 0);
-	if (!clip_pixel && !pass_set) {
+	// If alpha passthrough is active, the window region is managed by
+	// _update_window_rgn_from_alpha. Don't clear it here.
+	bool alpha_active = (wd.mpass && wd.alpha_width > 0 && wd.alpha_height > 0 && wd.alpha_data.size() > 0);
+	if (!clip_pixel && !pass_set && !alpha_active) {
 		SetWindowRgn(wd.hWnd, nullptr, TRUE);
+	} else if (alpha_active && !pass_set && !clip_pixel) {
+		// Alpha passthrough owns the region — refresh it.
+		_update_window_rgn_from_alpha(p_window);
 	} else {
 		HRGN region = nullptr;
 		if (pass_set) {
@@ -2039,6 +2107,165 @@ void DisplayServerWindows::_update_window_mouse_passthrough(WindowID p_window) {
 		}
 		SetWindowRgn(wd.hWnd, region, FALSE);
 	}
+}
+
+void DisplayServerWindows::_update_window_alpha_from_image(WindowID p_window, const Ref<Image> &p_image) {
+	ERR_FAIL_COND(!windows.has(p_window));
+	ERR_FAIL_COND(p_image.is_null());
+
+	WindowData &wd = windows[p_window];
+	int w = p_image->get_width();
+	int h = p_image->get_height();
+
+	// Extract only the alpha channel into a compact buffer.
+	wd.alpha_data.resize(w * h);
+	const uint8_t *src = p_image->get_data().ptr();
+	int pixel_size = p_image->get_format() == Image::FORMAT_RGBA8 ? 4 : 0;
+	// If the image format is not RGBA8, convert first.
+	Ref<Image> rgba_image = p_image;
+	if (pixel_size == 0) {
+		rgba_image = p_image->duplicate();
+		rgba_image->convert(Image::FORMAT_RGBA8);
+		src = rgba_image->get_data().ptr();
+		pixel_size = 4;
+	}
+
+	uint8_t *dst = wd.alpha_data.ptrw();
+	for (int i = 0; i < w * h; i++) {
+		dst[i] = src[i * pixel_size + 3]; // Alpha byte
+	}
+	wd.alpha_width = w;
+	wd.alpha_height = h;
+
+	// Update the window region based on the new alpha data.
+	// This creates a SetWindowRgn region from non-transparent pixels,
+	// so clicks on transparent pixels pass through to windows below.
+	if (wd.mpass) {
+		_update_window_rgn_from_alpha(p_window);
+	}
+}
+
+void DisplayServerWindows::_update_window_rgn_from_alpha(WindowID p_window) {
+	ERR_FAIL_COND(!windows.has(p_window));
+
+	const WindowData &wd = windows[p_window];
+	if (wd.alpha_width <= 0 || wd.alpha_height <= 0 || wd.alpha_data.size() == 0) {
+		// No alpha data — remove any window region to restore default behavior.
+		SetWindowRgn(wd.hWnd, nullptr, TRUE);
+		return;
+	}
+
+	const int w = wd.alpha_width;
+	const int h = wd.alpha_height;
+	const uint8_t threshold = wd.alpha_threshold;
+	const uint8_t *alpha = wd.alpha_data.ptr();
+
+	// Scale factors from window coords to alpha buffer coords.
+	const float sx = (float)w / (float)wd.width;
+	const float sy = (float)h / (float)wd.height;
+
+	// Build the region in window coordinates (scaled up from alpha buffer).
+	// We scan the alpha buffer row-by-row, grouping consecutive opaque pixels
+	// into horizontal rectangles, then batch them into ExtCreateRegion calls.
+	HRGN full_rgn = nullptr;
+
+	const int ALLOC_UNIT = 2000;
+	DWORD max_rects = ALLOC_UNIT;
+	DWORD buf_size = sizeof(RGNDATAHEADER) + (sizeof(RECT) * max_rects);
+	RGNDATA *pData = (RGNDATA *)memalloc(buf_size);
+	memset(&pData->rdh, 0, sizeof(RGNDATAHEADER));
+	pData->rdh.dwSize = sizeof(RGNDATAHEADER);
+	pData->rdh.iType = RDH_RECTANGLES;
+	pData->rdh.nCount = 0;
+	pData->rdh.nRgnSize = 0;
+	SetRect(&pData->rdh.rcBound, MAXLONG, MAXLONG, 0, 0);
+
+	// Map alpha buffer row to window y-range.
+	// alpha row i corresponds to window y in [i/sy, (i+1)/sy)
+	for (int ay = 0; ay < h; ay++) {
+		int wy0 = (int)(ay / sy);
+		int wy1 = (int)((ay + 1) / sy);
+		if (wy1 <= wy0) {
+			wy1 = wy0 + 1;
+		}
+
+		int ax = 0;
+		while (ax < w) {
+			// Skip transparent pixels.
+			while (ax < w && alpha[ay * w + ax] < threshold) {
+				ax++;
+			}
+			if (ax >= w) {
+				break;
+			}
+			// Find end of opaque run.
+			int ax0 = ax;
+			while (ax < w && alpha[ay * w + ax] >= threshold) {
+				ax++;
+			}
+			// Map alpha range [ax0, ax) to window x-range.
+			int wx0 = (int)(ax0 / sx);
+			int wx1 = (int)(ax / sx);
+			if (wx1 <= wx0) {
+				wx1 = wx0 + 1;
+			}
+
+			// Add rectangle (wx0, wy0) - (wx1, wy1) to region data.
+			if (pData->rdh.nCount >= max_rects) {
+				// Flush current batch.
+				HRGN batch = ExtCreateRegion(nullptr, buf_size, pData);
+				if (batch) {
+					if (full_rgn) {
+						CombineRgn(full_rgn, full_rgn, batch, RGN_OR);
+						DeleteObject(batch);
+					} else {
+						full_rgn = batch;
+					}
+				}
+				pData->rdh.nCount = 0;
+				SetRect(&pData->rdh.rcBound, MAXLONG, MAXLONG, 0, 0);
+			}
+
+			RECT *pr = (RECT *)&pData->Buffer;
+			SetRect(&pr[pData->rdh.nCount], wx0, wy0, wx1, wy1);
+			if (wx0 < pData->rdh.rcBound.left) {
+				pData->rdh.rcBound.left = wx0;
+			}
+			if (wy0 < pData->rdh.rcBound.top) {
+				pData->rdh.rcBound.top = wy0;
+			}
+			if (wx1 > pData->rdh.rcBound.right) {
+				pData->rdh.rcBound.right = wx1;
+			}
+			if (wy1 > pData->rdh.rcBound.bottom) {
+				pData->rdh.rcBound.bottom = wy1;
+			}
+			pData->rdh.nCount++;
+		}
+	}
+
+	// Flush remaining rectangles.
+	if (pData->rdh.nCount > 0) {
+		HRGN batch = ExtCreateRegion(nullptr, buf_size, pData);
+		if (batch) {
+			if (full_rgn) {
+				CombineRgn(full_rgn, full_rgn, batch, RGN_OR);
+				DeleteObject(batch);
+			} else {
+				full_rgn = batch;
+			}
+		}
+	}
+
+	memfree(pData);
+
+	// Set the window region. The system takes ownership of the HRGN.
+	SetWindowRgn(wd.hWnd, full_rgn, TRUE);
+}
+
+void DisplayServerWindows::_set_window_alpha_passthrough_threshold(WindowID p_window, uint8_t p_threshold) {
+	ERR_FAIL_COND(!windows.has(p_window));
+	windows[p_window].alpha_threshold = p_threshold;
 }
 
 int DisplayServerWindows::window_get_current_screen(WindowID p_window) const {
@@ -2731,6 +2958,11 @@ void DisplayServerWindows::window_set_flag(WindowFlags p_flag, bool p_enabled, W
 		} break;
 		case WINDOW_FLAG_MOUSE_PASSTHROUGH: {
 			wd.mpass = p_enabled;
+			if (!p_enabled) {
+				// Remove the window region so the full window is clickable again.
+				SetWindowRgn(wd.hWnd, nullptr, TRUE);
+			}
+			_update_window_mouse_passthrough(p_window);
 		} break;
 		case WINDOW_FLAG_EXCLUDE_FROM_CAPTURE: {
 			wd.hide_from_capture = p_enabled;
@@ -4812,7 +5044,16 @@ LRESULT DisplayServerWindows::WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARA
 		} break;
 		case WM_NCHITTEST: {
 			if (windows[window_id].mpass) {
-				return HTTRANSPARENT;
+				const WindowData &wd = windows[window_id];
+				if (wd.alpha_width > 0 && wd.alpha_height > 0 && wd.alpha_data.size() > 0) {
+					// Per-pixel alpha passthrough is handled by SetWindowRgn.
+					// Transparent pixels are excluded from the window region,
+					// so WM_NCHITTEST is only called for opaque pixels.
+					// Fall through to default handling (HTCLIENT, etc.).
+				} else {
+					// No alpha buffer — global pass-through (backward compat).
+					return HTTRANSPARENT;
+				}
 			}
 		} break;
 		case WM_MOUSEACTIVATE: {

@@ -324,6 +324,12 @@ class DisplayServerWindows : public DisplayServer {
 		bool sharp_corners = false;
 		bool hide_from_capture = false;
 
+		// Alpha passthrough: per-pixel click-through for transparent pixels.
+		Vector<uint8_t> alpha_data; // Compact alpha channel buffer (1 byte per pixel).
+		int alpha_width = 0;
+		int alpha_height = 0;
+		uint8_t alpha_threshold = 1; // Pixels with alpha < threshold are transparent.
+
 		// Used to transfer data between events using timer.
 		WPARAM saved_wparam;
 		LPARAM saved_lparam;
@@ -495,6 +501,9 @@ class DisplayServerWindows : public DisplayServer {
 
 	void _update_window_style(WindowID p_window, bool p_repaint = true);
 	void _update_window_mouse_passthrough(WindowID p_window);
+	void _update_window_alpha_from_image(WindowID p_window, const Ref<Image> &p_image);
+	void _update_window_rgn_from_alpha(WindowID p_window);
+	void _set_window_alpha_passthrough_threshold(WindowID p_window, uint8_t p_threshold);
 
 	void _update_real_mouse_position(WindowID p_window);
 
@@ -631,6 +640,12 @@ public:
 	virtual void window_set_title(const String &p_title, WindowID p_window = MAIN_WINDOW_ID) override;
 	virtual Size2i window_get_title_size(const String &p_title, WindowID p_window = MAIN_WINDOW_ID) const override;
 	virtual void window_set_mouse_passthrough(const Vector<Vector2> &p_region, WindowID p_window = MAIN_WINDOW_ID) override;
+
+	virtual void window_set_alpha_passthrough_enabled(bool p_enabled, WindowID p_window = MAIN_WINDOW_ID) override;
+	virtual bool window_get_alpha_passthrough_enabled(WindowID p_window = MAIN_WINDOW_ID) const override;
+	virtual void window_set_alpha_passthrough_threshold(int p_threshold, WindowID p_window = MAIN_WINDOW_ID) override;
+	virtual void window_update_alpha_buffer(const PackedByteArray &p_alpha, int p_width, int p_height, WindowID p_window = MAIN_WINDOW_ID) override;
+	virtual void window_update_alpha_from_image(const Ref<Image> &p_image, WindowID p_window = MAIN_WINDOW_ID) override;
 
 	virtual int window_get_current_screen(WindowID p_window = MAIN_WINDOW_ID) const override;
 	virtual void window_set_current_screen(int p_screen, WindowID p_window = MAIN_WINDOW_ID) override;
