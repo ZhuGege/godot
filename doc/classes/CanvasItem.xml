@@ -672,6 +672,9 @@
 			The color applied to this [CanvasItem]. This property does [b]not[/b] affect child [CanvasItem]s, unlike [member modulate] which affects both the node itself and its children.
 			[b]Note:[/b] Internal children are also not affected by this property (see the [code]include_internal[/code] parameter in [method Node.add_child]). For built-in nodes this includes sliders in [ColorPicker], and the tab bar in [TabContainer].
 		</member>
+		<member name="save_as_pose" type="Dictionary">
+			Editor-only Inspector category used to store pose snapshots for the currently edited scene. It lists direct [CanvasItem] children under the scene root, lets each child be enabled or disabled for export, and writes their [code]position[/code], [code]scale[/code] and [code]rotation_degrees[/code] values to [code]res://config/pose.json[/code]. The saved [code]scale[/code] value stores both X and Y components as a two-element array.
+		</member>
 		<member name="show_behind_parent" type="bool" setter="set_draw_behind_parent" getter="is_draw_behind_parent_enabled" default="false">
 			If [code]true[/code], this node draws behind its parent.
 		</member>

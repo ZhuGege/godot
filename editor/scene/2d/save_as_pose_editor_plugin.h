@@ -33,13 +33,17 @@
 #include "editor/inspector/editor_inspector.h"
 #include "scene/gui/box_container.h"
 
+class EditorInspectorCategory;
 class Label;
+class MarginContainer;
 class Node;
 
 class SaveAsPoseEditor : public VBoxContainer {
 	GDCLASS(SaveAsPoseEditor, VBoxContainer);
 
-	EditorInspectorSection *section = nullptr;
+	EditorInspectorCategory *category = nullptr;
+	MarginContainer *content_margin = nullptr;
+	VBoxContainer *content_vbox = nullptr;
 	VBoxContainer *node_list_vbox = nullptr;
 	Label *empty_label = nullptr;
 	EditorInspectorActionButton *save_button = nullptr;
@@ -52,7 +56,6 @@ class SaveAsPoseEditor : public VBoxContainer {
 
 protected:
 	static void _bind_methods();
-	void _notification(int p_what);
 
 public:
 	void set_scene_root(Node *p_scene_root);

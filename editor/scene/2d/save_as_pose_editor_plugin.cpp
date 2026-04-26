@@ -35,11 +35,12 @@
 #include "core/io/file_access.h"
 #include "core/io/json.h"
 #include "core/math/math_funcs.h"
+#include "editor/themes/editor_scale.h"
 #include "editor/editor_node.h"
-#include "editor/editor_string_names.h"
 #include "editor/gui/editor_toaster.h"
 #include "scene/gui/check_box.h"
 #include "scene/gui/label.h"
+#include "scene/gui/margin_container.h"
 #include "scene/main/canvas_item.h"
 #include "scene/scene_string_names.h"
 
@@ -64,7 +65,10 @@ Array _pose_vector2(const Vector2 &p_value) {
 }
 
 Variant _pose_scale(const Size2 &p_scale) {
-	return _pose_number(p_scale.x);
+	Array values;
+	values.push_back(_pose_number(p_scale.x));
+	values.push_back(_pose_number(p_scale.y));
+	return values;
 }
 
 String _pose_node_key(const String &p_name) {
@@ -102,17 +106,11 @@ void _set_node_selected(Node *p_scene_root, const String &p_node_path, bool p_se
 void SaveAsPoseEditor::_bind_methods() {
 }
 
-void SaveAsPoseEditor::_notification(int p_what) {
-	if (p_what == NOTIFICATION_THEME_CHANGED && section) {
-		section->set_bg_color(get_theme_color(SNAME("prop_subsection"), EditorStringName(Editor)));
-	}
-}
-
 void SaveAsPoseEditor::set_scene_root(Node *p_scene_root) {
 	scene_root = p_scene_root;
-	section->setup("save_as_pose", TTR("SaveAsPose"), scene_root, Color(0.0f, 0.0f, 0.0f), true);
-	section->unfold();
-	section->set_bg_color(get_theme_color(SNAME("prop_subsection"), EditorStringName(Editor)));
+	category->set_property_info(PropertyInfo(Variant::NIL, "SaveAsPose"));
+	category->set_doc_class_name("CanvasItem");
+	category->set_tooltip_text("property|CanvasItem|save_as_pose");
 	scene_root->connect(SNAME("child_order_changed"), callable_mp(this, &SaveAsPoseEditor::_rebuild_node_list), CONNECT_REFERENCE_COUNTED);
 	_rebuild_node_list();
 }
@@ -271,15 +269,26 @@ void SaveAsPoseEditor::_save_pressed() {
 }
 
 SaveAsPoseEditor::SaveAsPoseEditor() {
-	section = memnew(EditorInspectorSection);
-	add_child(section);
+	category = memnew(EditorInspectorCategory);
+	add_child(category);
+
+	content_margin = memnew(MarginContainer);
+	content_margin->add_theme_constant_override(SNAME("margin_left"), Math::round(14 * EDSCALE));
+	content_margin->add_theme_constant_override(SNAME("margin_right"), Math::round(4 * EDSCALE));
+	content_margin->add_theme_constant_override(SNAME("margin_bottom"), Math::round(8 * EDSCALE));
+	add_child(content_margin);
+
+	content_vbox = memnew(VBoxContainer);
+	content_vbox->set_theme_type_variation(SNAME("EditorPropertyContainer"));
+	content_vbox->add_theme_constant_override(SNAME("separation"), Math::round(4 * EDSCALE));
+	content_margin->add_child(content_vbox);
 
 	node_list_vbox = memnew(VBoxContainer);
-	section->get_vbox()->add_child(node_list_vbox);
+	content_vbox->add_child(node_list_vbox);
 
 	save_button = memnew(EditorInspectorActionButton(TTRC("Save"), SNAME("Save")));
 	save_button->connect(SceneStringName(pressed), callable_mp(this, &SaveAsPoseEditor::_save_pressed));
-	section->get_vbox()->add_child(save_button);
+	content_vbox->add_child(save_button);
 }
 
 bool EditorInspectorPluginSaveAsPose::can_handle(Object *p_object) {
