@@ -118,6 +118,7 @@
 #include "editor/import/3d/resource_importer_obj.h"
 #include "editor/import/3d/resource_importer_scene.h"
 #include "editor/import/3d/scene_import_settings.h"
+#include "editor/scene/2d/save_as_pose_editor_plugin.h"
 #include "editor/import/audio_stream_import_settings.h"
 #include "editor/import/dynamic_font_import_settings.h"
 #include "editor/import/fbx_importer_manager.h"
@@ -8428,6 +8429,10 @@ EditorNode::EditorNode() {
 		Ref<EditorInspectorParticleProcessMaterialPlugin> ppm;
 		ppm.instantiate();
 		EditorInspector::add_inspector_plugin(ppm);
+
+		Ref<EditorInspectorPluginSaveAsPose> sapp;
+		sapp.instantiate();
+		EditorInspector::add_inspector_plugin(sapp);
 	}
 
 	editor_selection = memnew(EditorSelection);
