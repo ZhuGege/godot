@@ -34,6 +34,7 @@
 #include "core/io/dir_access.h"
 #include "core/io/file_access.h"
 #include "core/io/json.h"
+#include "core/io/resource.h"
 #include "core/math/math_funcs.h"
 #include "editor/themes/editor_scale.h"
 #include "editor/editor_node.h"
@@ -69,6 +70,56 @@ Variant _pose_scale(const Size2 &p_scale) {
 	values.push_back(_pose_number(p_scale.x));
 	values.push_back(_pose_number(p_scale.y));
 	return values;
+}
+
+String _get_resource_path(const Variant &p_variant) {
+	if (p_variant.get_type() != Variant::OBJECT) {
+		return String();
+	}
+
+	Ref<Resource> resource = p_variant;
+	if (resource.is_null()) {
+		return String();
+	}
+
+	return resource->get_path();
+}
+
+String _get_canvas_item_texture_path(CanvasItem *p_canvas_item) {
+	ERR_FAIL_NULL_V(p_canvas_item, String());
+
+	bool valid = false;
+	String texture_path = _get_resource_path(p_canvas_item->get(SNAME("texture"), &valid));
+	if (valid && !texture_path.is_empty()) {
+		return texture_path;
+	}
+
+	List<PropertyInfo> property_list;
+	p_canvas_item->get_property_list(&property_list, true);
+
+	for (const PropertyInfo &property : property_list) {
+		if (property.type != Variant::OBJECT || property.hint != PROPERTY_HINT_RESOURCE_TYPE) {
+			continue;
+		}
+		if (!property.hint_string.contains("Texture")) {
+			continue;
+		}
+
+		const String property_name = property.name;
+		if (property_name != "icon" && !property_name.contains("texture")) {
+			continue;
+		}
+		if (property_name.begins_with("theme_override_")) {
+			continue;
+		}
+
+		texture_path = _get_resource_path(p_canvas_item->get(property.name, &valid));
+		if (valid && !texture_path.is_empty()) {
+			return texture_path;
+		}
+	}
+
+	return String();
 }
 
 String _pose_node_key(const String &p_name) {
@@ -213,6 +264,7 @@ void SaveAsPoseEditor::_save_pressed() {
 		pose_entry[node_key + "_position"] = _pose_vector2(canvas_item->_edit_get_position());
 		pose_entry[node_key + "_scale"] = _pose_scale(canvas_item->_edit_get_scale());
 		pose_entry[node_key + "_rotation_degrees"] = _pose_number(Math::rad_to_deg(canvas_item->_edit_get_rotation()));
+		pose_entry[node_key + "_texture_path"] = _get_canvas_item_texture_path(canvas_item);
 	}
 
 	if (pose_entry.is_empty()) {
