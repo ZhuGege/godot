@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  save_as_pose_editor_plugin.h                                          */
+/*  scene_templates_editor_plugin.h                                       */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -34,25 +34,30 @@
 #include "scene/gui/box_container.h"
 
 class EditorInspectorCategory;
+class HSeparator;
 class Label;
 class MarginContainer;
 class Node;
 
-class SaveAsPoseEditor : public VBoxContainer {
-	GDCLASS(SaveAsPoseEditor, VBoxContainer);
+class SceneTemplatesEditor : public VBoxContainer {
+	GDCLASS(SceneTemplatesEditor, VBoxContainer);
 
 	EditorInspectorCategory *category = nullptr;
 	MarginContainer *content_margin = nullptr;
 	VBoxContainer *content_vbox = nullptr;
+	VBoxContainer *tmpl_buttons_vbox = nullptr;
+	HSeparator *tmpl_separator = nullptr;
 	VBoxContainer *node_list_vbox = nullptr;
 	Label *empty_label = nullptr;
 	EditorInspectorActionButton *save_button = nullptr;
 	Node *scene_root = nullptr;
 
 	void _rebuild_node_list();
+	void _rebuild_template_buttons();
 	void _update_save_button_state();
 	void _node_toggled(bool p_pressed, const String &p_node_path);
 	void _save_pressed();
+	void _template_selected(const String &p_tmpl_id);
 
 protected:
 	static void _bind_methods();
@@ -60,11 +65,11 @@ protected:
 public:
 	void set_scene_root(Node *p_scene_root);
 
-	SaveAsPoseEditor();
+	SceneTemplatesEditor();
 };
 
-class EditorInspectorPluginSaveAsPose : public EditorInspectorPlugin {
-	GDCLASS(EditorInspectorPluginSaveAsPose, EditorInspectorPlugin);
+class EditorInspectorPluginSceneTemplates : public EditorInspectorPlugin {
+	GDCLASS(EditorInspectorPluginSceneTemplates, EditorInspectorPlugin);
 
 public:
 	virtual bool can_handle(Object *p_object) override;
