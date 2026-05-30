@@ -87,6 +87,7 @@ class SceneTemplatesEditor : public VBoxContainer {
 	Node *scene_root = nullptr;
 
 	String _selected_tmpl_id;
+	HashSet<String> _pending_entries;
 
 	void _rebuild_node_list();
 	void _rebuild_template_list();
@@ -96,6 +97,7 @@ class SceneTemplatesEditor : public VBoxContainer {
 	void _on_template_selected(const String &p_tmpl_id);
 	void _on_entry_name_changed(const String &p_tmpl_id, const String &p_new_name);
 	void _on_add_template();
+	void _notification(int p_what);
 
 protected:
 	static void _bind_methods();

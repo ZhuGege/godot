@@ -53,6 +53,8 @@
 namespace {
 
 HashMap<ObjectID, HashMap<String, bool>> scene_templates_selection_state;
+HashMap<ObjectID, String> scene_templates_selected_entry;
+HashSet<ObjectID> scene_templates_active_widgets;
 
 Variant _pose_number(real_t p_value) {
 	const real_t rounded_value = Math::round(p_value);
@@ -351,6 +353,7 @@ void SceneTemplatesEditor::_bind_methods() {
 
 void SceneTemplatesEditor::set_scene_root(Node *p_scene_root) {
 	scene_root = p_scene_root;
+	_selected_tmpl_id = scene_templates_selected_entry[scene_root->get_instance_id()];
 	category->set_property_info(PropertyInfo(Variant::NIL, "SceneTemplates"));
 	category->set_doc_class_name("CanvasItem");
 	category->set_tooltip_text("property|CanvasItem|scene_templates");
@@ -437,8 +440,13 @@ void SceneTemplatesEditor::_rebuild_template_list() {
 	}
 	sorted_names.sort();
 
+	List<String> skipped_empty;
 	for (const String &tmpl_id : sorted_names) {
 		Dictionary entry = templates[tmpl_id];
+		if (entry.is_empty()) {
+			skipped_empty.push_back(tmpl_id);
+			continue;
+		}
 
 		SceneTemplateEntry *entry_widget = memnew(SceneTemplateEntry);
 		entry_widget->set_entry_id(tmpl_id);
@@ -451,6 +459,17 @@ void SceneTemplatesEditor::_rebuild_template_list() {
 		tmpl_list_vbox->add_child(entry_widget);
 	}
 
+	if (!skipped_empty.is_empty()) {
+		String names;
+		for (const String &n : skipped_empty) {
+			if (!names.is_empty()) {
+				names += ", ";
+			}
+			names += n;
+		}
+		EditorToaster::get_singleton()->popup_str(vformat(TTR("Skipped empty entries: %s"), names), EditorToaster::SEVERITY_WARNING);
+	}
+
 	add_button = memnew(Button);
 	add_button->set_text("+");
 	add_button->connect(SceneStringName(pressed), callable_mp(this, &SceneTemplatesEditor::_on_add_template));
@@ -460,6 +479,7 @@ void SceneTemplatesEditor::_rebuild_template_list() {
 
 void SceneTemplatesEditor::_on_template_selected(const String &p_tmpl_id) {
 	_selected_tmpl_id = p_tmpl_id;
+	scene_templates_selected_entry[scene_root->get_instance_id()] = p_tmpl_id;
 
 	// 高亮选中的条目
 	for (int i = 0; i < tmpl_list_vbox->get_child_count(); i++) {
@@ -552,6 +572,7 @@ void SceneTemplatesEditor::_on_entry_name_changed(const String &p_tmpl_id, const
 
 	if (_selected_tmpl_id == p_tmpl_id) {
 		_selected_tmpl_id = p_new_name;
+		scene_templates_selected_entry[scene_root->get_instance_id()] = p_new_name;
 	}
 
 	_write_templates(scene_root, templates);
@@ -560,6 +581,10 @@ void SceneTemplatesEditor::_on_entry_name_changed(const String &p_tmpl_id, const
 // ── 新建条目 ─────────────────────────────────────
 
 void SceneTemplatesEditor::_on_add_template() {
+	if (!scene_root) {
+		return;
+	}
+
 	Dictionary templates = _load_templates(scene_root);
 
 	// 找唯一名称
@@ -570,11 +595,32 @@ void SceneTemplatesEditor::_on_add_template() {
 		new_name = "Template " + itos(n);
 	}
 
-	Dictionary new_entry;
-	templates[new_name] = new_entry;
+	// 保存当前场景布局到新条目
+	Dictionary tmpl_entry;
+	HashMap<String, int> used_node_keys;
+	const int child_count = scene_root->get_child_count(false);
+	for (int i = 0; i < child_count; i++) {
+		CanvasItem *canvas_item = Object::cast_to<CanvasItem>(scene_root->get_child(i, false));
+		if (!canvas_item) {
+			continue;
+		}
+		String node_key = _pose_node_key(String(canvas_item->get_name()));
+		if (int *existing_count = used_node_keys.getptr(node_key)) {
+			(*existing_count)++;
+			node_key += "_" + itos(*existing_count);
+		} else {
+			used_node_keys.insert(node_key, 1);
+		}
+		tmpl_entry[node_key + "_position"] = _pose_vector2(canvas_item->_edit_get_position());
+		tmpl_entry[node_key + "_scale"] = _pose_scale(canvas_item->_edit_get_scale());
+		tmpl_entry[node_key + "_rotation_degrees"] = _pose_number(Math::rad_to_deg(canvas_item->_edit_get_rotation()));
+		tmpl_entry[node_key + "_texture_path"] = _get_canvas_item_texture_path(canvas_item);
+	}
 
+	templates[new_name] = tmpl_entry;
 	_write_templates(scene_root, templates);
 	_selected_tmpl_id = new_name;
+	scene_templates_selected_entry[scene_root->get_instance_id()] = new_name;
 	_rebuild_template_list();
 }
 
@@ -628,12 +674,31 @@ void SceneTemplatesEditor::_save_pressed() {
 
 	Dictionary templates = _load_templates(scene_root);
 	templates[_selected_tmpl_id] = tmpl_entry;
+
+	// 清理空条目
+	List<Variant> empty_keys;
+	for (const Variant &key : templates.get_key_list()) {
+		Dictionary entry = templates[key];
+		if (entry.is_empty()) {
+			empty_keys.push_back(key);
+		}
+	}
+	for (const Variant &key : empty_keys) {
+		templates.erase(key);
+	}
+
 	_write_templates(scene_root, templates);
 
 	const String rel_path = _template_relative_path(scene_root);
 	EditorToaster::get_singleton()->popup_str(vformat(TTR("Scene template saved to %s."), rel_path), EditorToaster::SEVERITY_INFO);
 
 	_rebuild_template_list();
+}
+
+void SceneTemplatesEditor::_notification(int p_what) {
+	if (p_what == NOTIFICATION_PREDELETE && scene_root) {
+		scene_templates_active_widgets.erase(scene_root->get_instance_id());
+	}
 }
 
 // ── 构造函数 ─────────────────────────────────────
@@ -669,15 +734,22 @@ SceneTemplatesEditor::SceneTemplatesEditor() {
 }
 
 bool EditorInspectorPluginSceneTemplates::can_handle(Object *p_object) {
-	return Object::cast_to<Node>(p_object) != nullptr;
+	return true;
 }
 
 void EditorInspectorPluginSceneTemplates::parse_end(Object *p_object) {
-	Node *node = Object::cast_to<Node>(p_object);
-	if (!node || node != EditorNode::get_singleton()->get_edited_scene()) {
+	Node *edited_root = EditorNode::get_singleton()->get_edited_scene();
+	if (!edited_root) {
 		return;
 	}
+
+	ObjectID root_id = edited_root->get_instance_id();
+	if (scene_templates_active_widgets.has(root_id)) {
+		return;
+	}
+	scene_templates_active_widgets.insert(root_id);
+
 	SceneTemplatesEditor *editor = memnew(SceneTemplatesEditor);
-	editor->set_scene_root(node);
+	editor->set_scene_root(edited_root);
 	add_custom_control(editor);
 }
