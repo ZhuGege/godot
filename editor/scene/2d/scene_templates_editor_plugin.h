@@ -33,11 +33,41 @@
 #include "editor/inspector/editor_inspector.h"
 #include "scene/gui/box_container.h"
 
+class Button;
 class EditorInspectorCategory;
 class HSeparator;
 class Label;
+class LineEdit;
 class MarginContainer;
 class Node;
+
+// ── 单个模板条目控件 ─────────────────────────────
+
+class SceneTemplateEntry : public HBoxContainer {
+	GDCLASS(SceneTemplateEntry, HBoxContainer);
+
+	LineEdit *name_edit = nullptr;
+	String entry_id;
+
+	void _on_focus_entered();
+	void _on_gui_input(const Ref<InputEvent> &p_event);
+	void _on_text_submitted(const String &p_new_text);
+	void _on_focus_exited();
+
+protected:
+	static void _bind_methods();
+
+public:
+	void set_entry_id(const String &p_id);
+	String get_entry_id() const;
+	void set_entry_name(const String &p_name);
+	String get_entry_name() const;
+	void set_highlighted(bool p_highlighted);
+
+	SceneTemplateEntry();
+};
+
+// ── 场景模板编辑器面板 ──────────────────────────
 
 class SceneTemplatesEditor : public VBoxContainer {
 	GDCLASS(SceneTemplatesEditor, VBoxContainer);
@@ -45,19 +75,24 @@ class SceneTemplatesEditor : public VBoxContainer {
 	EditorInspectorCategory *category = nullptr;
 	MarginContainer *content_margin = nullptr;
 	VBoxContainer *content_vbox = nullptr;
-	VBoxContainer *tmpl_buttons_vbox = nullptr;
-	HSeparator *tmpl_separator = nullptr;
+	VBoxContainer *tmpl_list_vbox = nullptr;
+	Button *add_button = nullptr;
+	HSeparator *list_separator = nullptr;
 	VBoxContainer *node_list_vbox = nullptr;
 	Label *empty_label = nullptr;
 	EditorInspectorActionButton *save_button = nullptr;
 	Node *scene_root = nullptr;
 
+	String _selected_tmpl_id;
+
 	void _rebuild_node_list();
-	void _rebuild_template_buttons();
+	void _rebuild_template_list();
 	void _update_save_button_state();
 	void _node_toggled(bool p_pressed, const String &p_node_path);
 	void _save_pressed();
-	void _template_selected(const String &p_tmpl_id);
+	void _on_template_selected(const String &p_tmpl_id);
+	void _on_entry_name_changed(const String &p_tmpl_id, const String &p_new_name);
+	void _on_add_template();
 
 protected:
 	static void _bind_methods();
@@ -67,6 +102,8 @@ public:
 
 	SceneTemplatesEditor();
 };
+
+// ── Inspector 插件 ──────────────────────────────
 
 class EditorInspectorPluginSceneTemplates : public EditorInspectorPlugin {
 	GDCLASS(EditorInspectorPluginSceneTemplates, EditorInspectorPlugin);
