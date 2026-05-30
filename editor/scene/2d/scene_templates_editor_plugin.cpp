@@ -47,6 +47,7 @@
 #include "scene/gui/margin_container.h"
 #include "scene/gui/separator.h"
 #include "scene/main/canvas_item.h"
+#include "scene/resources/style_box_flat.h"
 #include "scene/scene_string_names.h"
 
 namespace {
@@ -330,10 +331,13 @@ SceneTemplateEntry::SceneTemplateEntry() {
 
 void SceneTemplateEntry::_notification(int p_what) {
 	if (p_what == NOTIFICATION_DRAW) {
-		if (_highlighted) {
-			draw_rect(Rect2(Vector2(), get_size()), Color(0.25, 0.45, 0.75, 0.25));
-		}
-		draw_rect(Rect2(Vector2(), get_size()), Color(0.3, 0.3, 0.3), false, 1.0);
+		Ref<StyleBoxFlat> style;
+		style.instantiate();
+		style->set_bg_color(_highlighted ? Color(0.25, 0.45, 0.75, 0.25) : Color(0.1, 0.1, 0.1, 0.04));
+		style->set_border_width_all(1);
+		style->set_border_color(Color(0.35, 0.35, 0.35));
+		style->set_corner_radius_all(3);
+		style->draw(get_canvas_item(), Rect2(Vector2(), get_size()));
 	}
 }
 
