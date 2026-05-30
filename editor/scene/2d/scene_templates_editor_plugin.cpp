@@ -239,7 +239,8 @@ String _entry_display_name(const Dictionary &p_entry, const String &p_id) {
 	if (p_entry.has("name") && String(p_entry["name"]).strip_edges().length() > 0) {
 		return p_entry["name"];
 	}
-	return "Template " + p_id;
+	// 兼容旧格式，新格式 key 即为名称
+	return p_id;
 }
 
 } // namespace
@@ -429,14 +430,14 @@ void SceneTemplatesEditor::_rebuild_template_list() {
 	Dictionary templates = _load_templates(scene_root);
 	Dictionary landmark_names = _load_landmark_names();
 
-	List<int> sorted_ids;
+	// 按名称排序
+	List<String> sorted_names;
 	for (const Variant &key : templates.get_key_list()) {
-		sorted_ids.push_back(String(key).to_int());
+		sorted_names.push_back(key);
 	}
-	sorted_ids.sort();
+	sorted_names.sort();
 
-	for (int id : sorted_ids) {
-		const String tmpl_id = itos(id);
+	for (const String &tmpl_id : sorted_names) {
 		Dictionary entry = templates[tmpl_id];
 
 		SceneTemplateEntry *entry_widget = memnew(SceneTemplateEntry);
@@ -453,11 +454,7 @@ void SceneTemplatesEditor::_rebuild_template_list() {
 	add_button = memnew(Button);
 	add_button->set_text("+");
 	add_button->connect(SceneStringName(pressed), callable_mp(this, &SceneTemplatesEditor::_on_add_template));
-	if (sorted_ids.is_empty()) {
-		add_button->set_h_size_flags(SIZE_FILL);
-	} else {
-		add_button->set_h_size_flags(SIZE_SHRINK_BEGIN);
-	}
+	add_button->set_h_size_flags(sorted_names.is_empty() ? SIZE_FILL : SIZE_SHRINK_BEGIN);
 	tmpl_list_vbox->add_child(add_button);
 }
 
@@ -534,13 +531,29 @@ void SceneTemplatesEditor::_on_template_selected(const String &p_tmpl_id) {
 }
 
 void SceneTemplatesEditor::_on_entry_name_changed(const String &p_tmpl_id, const String &p_new_name) {
+	if (p_new_name.strip_edges().is_empty() || p_new_name == p_tmpl_id) {
+		return;
+	}
+
 	Dictionary templates = _load_templates(scene_root);
 	if (!templates.has(p_tmpl_id)) {
 		return;
 	}
+
+	// 新名称不能与其他条目重名
+	if (templates.has(p_new_name)) {
+		return;
+	}
+
+	// 改名 = 移动 key
 	Dictionary entry = templates[p_tmpl_id];
-	entry["name"] = p_new_name;
-	templates[p_tmpl_id] = entry;
+	templates.erase(p_tmpl_id);
+	templates[p_new_name] = entry;
+
+	if (_selected_tmpl_id == p_tmpl_id) {
+		_selected_tmpl_id = p_new_name;
+	}
+
 	_write_templates(scene_root, templates);
 }
 
@@ -549,21 +562,19 @@ void SceneTemplatesEditor::_on_entry_name_changed(const String &p_tmpl_id, const
 void SceneTemplatesEditor::_on_add_template() {
 	Dictionary templates = _load_templates(scene_root);
 
-	int next_index = 1;
-	for (const Variant &key : templates.get_key_list()) {
-		const int index = String(key).to_int();
-		if (index >= next_index) {
-			next_index = index + 1;
-		}
+	// 找唯一名称
+	int n = 1;
+	String new_name = "Template " + itos(n);
+	while (templates.has(new_name)) {
+		n++;
+		new_name = "Template " + itos(n);
 	}
 
-	const String new_id = itos(next_index);
 	Dictionary new_entry;
-	new_entry["name"] = "Template " + new_id;
-	templates[new_id] = new_entry;
+	templates[new_name] = new_entry;
 
 	_write_templates(scene_root, templates);
-	_selected_tmpl_id = new_id;
+	_selected_tmpl_id = new_name;
 	_rebuild_template_list();
 }
 
@@ -616,13 +627,6 @@ void SceneTemplatesEditor::_save_pressed() {
 	}
 
 	Dictionary templates = _load_templates(scene_root);
-	Dictionary existing = templates.get(_selected_tmpl_id, Dictionary());
-	if (existing.has("name")) {
-		tmpl_entry["name"] = existing["name"];
-	} else {
-		tmpl_entry["name"] = "Template " + _selected_tmpl_id;
-	}
-
 	templates[_selected_tmpl_id] = tmpl_entry;
 	_write_templates(scene_root, templates);
 
