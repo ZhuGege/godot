@@ -46,13 +46,16 @@ class Node;
 class SceneTemplateEntry : public HBoxContainer {
 	GDCLASS(SceneTemplateEntry, HBoxContainer);
 
+	Label *display_label = nullptr;
 	LineEdit *name_edit = nullptr;
 	String entry_id;
+	bool _highlighted = false;
+	bool _editing = false;
 
-	void _on_focus_entered();
-	void _on_gui_input(const Ref<InputEvent> &p_event);
+	void gui_input(const Ref<InputEvent> &p_event) override;
 	void _on_text_submitted(const String &p_new_text);
 	void _on_focus_exited();
+	void _notification(int p_what);
 
 protected:
 	static void _bind_methods();

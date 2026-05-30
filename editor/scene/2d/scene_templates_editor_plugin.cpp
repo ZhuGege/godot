@@ -252,35 +252,38 @@ void SceneTemplateEntry::_bind_methods() {
 	ADD_SIGNAL(MethodInfo("name_changed", PropertyInfo(Variant::STRING, "entry_id"), PropertyInfo(Variant::STRING, "new_name")));
 }
 
-void SceneTemplateEntry::_on_focus_entered() {
-	// 键盘/ Tab 导航时触发选中
-	emit_signal(SNAME("selected"), entry_id);
-}
-
-void SceneTemplateEntry::_on_gui_input(const Ref<InputEvent> &p_event) {
+void SceneTemplateEntry::gui_input(const Ref<InputEvent> &p_event) {
 	Ref<InputEventMouseButton> mb = p_event;
 	if (mb.is_null() || mb->get_button_index() != MouseButton::LEFT || !mb->is_pressed()) {
 		return;
 	}
 
-	if (mb->is_double_click()) {
-		name_edit->set_editable(true);
+	if (mb->is_double_click() && !_editing) {
+		_editing = true;
+		display_label->hide();
+		name_edit->show();
+		name_edit->set_text(display_label->get_text());
 		name_edit->grab_focus();
 		name_edit->select_all();
-	} else {
-		// 单击：选中并加载
+	} else if (!mb->is_double_click() && !_editing) {
 		emit_signal(SNAME("selected"), entry_id);
 	}
 }
 
 void SceneTemplateEntry::_on_text_submitted(const String &p_new_text) {
-	name_edit->set_editable(false);
+	_editing = false;
+	display_label->set_text(p_new_text);
+	name_edit->hide();
+	display_label->show();
 	emit_signal(SNAME("name_changed"), entry_id, p_new_text);
 }
 
 void SceneTemplateEntry::_on_focus_exited() {
-	if (name_edit->is_editable()) {
-		name_edit->set_editable(false);
+	if (_editing) {
+		_editing = false;
+		display_label->set_text(name_edit->get_text());
+		name_edit->hide();
+		display_label->show();
 		emit_signal(SNAME("name_changed"), entry_id, name_edit->get_text());
 	}
 }
@@ -294,30 +297,44 @@ String SceneTemplateEntry::get_entry_id() const {
 }
 
 void SceneTemplateEntry::set_entry_name(const String &p_name) {
+	display_label->set_text(p_name);
 	name_edit->set_text(p_name);
 }
 
 String SceneTemplateEntry::get_entry_name() const {
-	return name_edit->get_text();
+	return display_label->get_text();
 }
 
 void SceneTemplateEntry::set_highlighted(bool p_highlighted) {
-	if (p_highlighted) {
-		name_edit->add_theme_color_override(SNAME("background_color"), Color(0.25, 0.45, 0.75, 0.3));
-	} else {
-		name_edit->remove_theme_color_override(SNAME("background_color"));
-	}
+	_highlighted = p_highlighted;
+	queue_redraw();
 }
 
 SceneTemplateEntry::SceneTemplateEntry() {
+	set_h_size_flags(SIZE_FILL);
+	set_custom_minimum_size(Size2(0, Math::round(20 * EDSCALE)));
+
+	display_label = memnew(Label);
+	display_label->set_h_size_flags(SIZE_EXPAND_FILL);
+	display_label->set_clip_text(true);
+	display_label->set_mouse_filter(MOUSE_FILTER_IGNORE);
+	add_child(display_label);
+
 	name_edit = memnew(LineEdit);
 	name_edit->set_h_size_flags(SIZE_EXPAND_FILL);
-	name_edit->set_editable(false);
-	name_edit->connect(SNAME("focus_entered"), callable_mp(this, &SceneTemplateEntry::_on_focus_entered));
-	name_edit->connect(SNAME("gui_input"), callable_mp(this, &SceneTemplateEntry::_on_gui_input));
+	name_edit->hide();
 	name_edit->connect(SNAME("text_submitted"), callable_mp(this, &SceneTemplateEntry::_on_text_submitted));
 	name_edit->connect(SNAME("focus_exited"), callable_mp(this, &SceneTemplateEntry::_on_focus_exited));
 	add_child(name_edit);
+}
+
+void SceneTemplateEntry::_notification(int p_what) {
+	if (p_what == NOTIFICATION_DRAW) {
+		if (_highlighted) {
+			draw_rect(Rect2(Vector2(), get_size()), Color(0.25, 0.45, 0.75, 0.25));
+		}
+		draw_rect(Rect2(Vector2(), get_size()), Color(0.3, 0.3, 0.3), false, 1.0);
+	}
 }
 
 // ═══════════════════════════════════════════════════════
@@ -333,7 +350,7 @@ void SceneTemplatesEditor::set_scene_root(Node *p_scene_root) {
 	category->set_doc_class_name("CanvasItem");
 	category->set_tooltip_text("property|CanvasItem|scene_templates");
 	scene_root->connect(SNAME("child_order_changed"), callable_mp(this, &SceneTemplatesEditor::_rebuild_node_list), CONNECT_REFERENCE_COUNTED);
-	_rebuild_node_list();
+	callable_mp(this, &SceneTemplatesEditor::_rebuild_node_list).call_deferred();
 }
 
 void SceneTemplatesEditor::_rebuild_node_list() {
